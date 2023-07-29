@@ -313,7 +313,7 @@ training_sets.partition_data_helper(
 
 testing_sets = DataPartitioner(
     data=test_dataset, args=args, numOfClass=num_class, isTest=True)
-testing_sets.partition_data_helper(num_clients=args.num_participants)
+testing_sets.partition_data_helper(num_clients=int(args.num_participants/50))
 
 print(f"Number of partitions: {len(training_sets.partitions)}.")
 
@@ -325,17 +325,32 @@ print(f"Train dataset raw tag: {train_dataset.targets[training_sets.partitions[0
 
 print("Data partitioner completes ...")
 
-print("\n+++++ Writing partitions to CSV files ... +++++")
+print("\n+++++ Writing training partitions to CSV files ... +++++")
 train_csv_path = os.path.join(args.data_dir, 'client_data_mapping', 'train.csv')
 completed = 0
-if not os.path.exists("/mydata/flame_dataset/" + args.data_set):
-    os.makedirs("/mydata/flame_dataset/" + args.data_set)
+if not os.path.exists("/mydata/flame_dataset/" + args.data_set + "/train"):
+    os.makedirs("/mydata/flame_dataset/" + args.data_set + "/train")
 
 for i in range(len(training_sets.partitions)):
     output_filename = "client-" + str(i) + "-train.csv"
-    output_path = os.path.join("/mydata/flame_dataset/", args.data_set, output_filename)
+    output_path = os.path.join("/mydata/flame_dataset/", args.data_set, "train", output_filename)
     read_lines_and_write_to_csv(train_csv_path, output_path, training_sets.partitions[i])
 
     if i % 100 == 0:
         completed += 100
         print(f"{completed} partitions completed, {len(training_sets.partitions) - completed} remains...")
+
+print("\n+++++ Writing testing partitions to CSV files ... +++++")
+test_csv_path = os.path.join(args.data_dir, 'client_data_mapping', 'test.csv')
+completed = 0
+if not os.path.exists("/mydata/flame_dataset/" + args.data_set + "/test"):
+    os.makedirs("/mydata/flame_dataset/" + args.data_set + "/test")
+
+for i in range(len(testing_sets.partitions)):
+    output_filename = "client-" + str(i) + "-test.csv"
+    output_path = os.path.join("/mydata/flame_dataset/", args.data_set, "test", output_filename)
+    read_lines_and_write_to_csv(test_csv_path, output_path, testing_sets.partitions[i])
+
+    if i % 100 == 0:
+        completed += 100
+        print(f"{completed} partitions completed, {len(testing_sets.partitions) - completed} remains...")
