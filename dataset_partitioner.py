@@ -47,76 +47,6 @@ def import_libs():
                                                          ToMelSpectrogram,
                                                          ToTensor)
 
-"""def init_model():
-    global tokenizer
-
-    logging.info("Initializing the model ...")
-
-    import_libs()
-
-    if args.task == 'nlp':
-        config = AutoConfig.from_pretrained(
-            os.path.join(args.data_dir, args.model + '-config.json'))
-        model = AutoModelWithLMHead.from_config(config)
-        tokenizer = AlbertTokenizer.from_pretrained(
-            args.model, do_lower_case=True)
-
-        # model_name = 'google/mobilebert-uncased'
-        # config = AutoConfig.from_pretrained(model_name)
-        # tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        # model = MobileBertForPreTraining.from_pretrained(model_name)
-        # model = AutoModelWithLMHead.from_config(config)
-
-    elif args.task == 'speech':
-        if args.model == 'mobilenet':
-            from fedscale.utils.models.specialized.resnet_speech import \
-                mobilenet_v2
-            model = mobilenet_v2(num_classes=outputClass[args.data_set])
-        elif args.model == "resnet18":
-            from fedscale.utils.models.specialized.resnet_speech import \
-                resnet18
-            model = resnet18(
-                num_classes=outputClass[args.data_set], in_channels=1)
-        elif args.model == "resnet34":
-            from fedscale.utils.models.specialized.resnet_speech import \
-                resnet34
-            model = resnet34(
-                num_classes=outputClass[args.data_set], in_channels=1)
-        elif args.model == "resnet50":
-            from fedscale.utils.models.specialized.resnet_speech import \
-                resnet50
-            model = resnet50(
-                num_classes=outputClass[args.data_set], in_channels=1)
-        elif args.model == "resnet101":
-            from fedscale.utils.models.specialized.resnet_speech import \
-                resnet101
-            model = resnet101(
-                num_classes=outputClass[args.data_set], in_channels=1)
-        elif args.model == "resnet152":
-            from fedscale.utils.models.specialized.resnet_speech import \
-                resnet152
-            model = resnet152(
-                num_classes=outputClass[args.data_set], in_channels=1)
-        else:
-            # Should not reach here
-            logging.info('Model must be resnet or mobilenet')
-            sys.exit(-1)
-
-    else:
-        if args.model_zoo == "fedscale-torch-zoo":
-            if args.task == "cv":
-                model = get_cv_model(name=args.model,
-                                        num_classes=outputClass[args.data_set])
-            else:
-                raise NameError(f"Model zoo {args.model_zoo} does not exist")
-        elif args.model_zoo == "torchcv":
-            model = tormodels.__dict__[args.model](
-                num_classes=outputClass[args.data_set])
-        else:
-            raise NameError(f"Model zoo {args.model_zoo} does not exist")
-    return model"""
-
-
 def init_dataset(args):
     import_libs()
 
@@ -258,6 +188,7 @@ def read_lines_and_write_to_csv(input_filename, output_filename, lines):
             # print(f"index: {index}; row: {row}")
             if index-1 in lines:
                 csv_writer.writerow(row)
+
 """
 Example 1 (Google Speech):
 python dataset_partitioner.py --data_set google_speech --data_dir /mydata/FedScale/benchmark/dataset/data/google_speech/ --task speech --model resnet34 --model_zoo none --num_participants 500
@@ -266,6 +197,7 @@ Example 2 (FEMNIST):
 python dataset_partitioner.py --data_set femnist --data_dir /mydata/FedScale/benchmark/dataset/data/femnist/ --task femnist --model resnet152 --model_zoo none --num_participants 3400
 
 Example 3 (Reddit):
+python dataset_partitioner.py --data_set reddit --data_dir /mydata/FedScale/benchmark/dataset/data/reddit/ --task nlp --model albert-base-v2 --model_zoo none --num_participants 1660820
 """
 
 parser = argparse.ArgumentParser()
@@ -277,7 +209,6 @@ parser.add_argument('--model', type=str, help='model name')
 parser.add_argument('--model_zoo', type=str, help='model zoo')
 parser.add_argument('--num_participants', type=int, help='# of participants')
 parser.add_argument('--data_map_file', type=int, help='path to client-to-data mapping file')
-# parser.add_argument('--block_size', type=int, default=62)
 
 args = parser.parse_args()
 
@@ -295,12 +226,18 @@ outputClass = {'Mnist': 10, 'cifar10': 10, "imagenet": 1000, 'emnist': 47, 'amaz
                }
 
 num_class = 0
+train_test_ratio = 0
 if args.data_set == "google_speech":
     num_class = outputClass['google_speech']
+    train_test_ratio = 50
 elif args.data_set == "femnist":
     num_class = outputClass['femnist']
-elif args.data_set == 'reddit':
+    train_test_ratio = 50
+elif args.data_set == "reddit":
     num_class = 0
+    train_test_ratio = 30000
+    args.overwrite_cache = False
+    args.block_size = 64
 
 print(f"Number of outputClass in {args.data_set} dataset: {num_class}")
 
@@ -313,7 +250,7 @@ training_sets.partition_data_helper(
 
 testing_sets = DataPartitioner(
     data=test_dataset, args=args, numOfClass=num_class, isTest=True)
-testing_sets.partition_data_helper(num_clients=int(args.num_participants/50))
+testing_sets.partition_data_helper(num_clients=int(args.num_participants/train_test_ratio))
 
 print(f"Number of partitions: {len(training_sets.partitions)}.")
 

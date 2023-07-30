@@ -90,7 +90,7 @@ class TextDataset(Dataset):
 
         directory = file_path
         cached_features_file = os.path.join(
-            directory, args.model + "_cached_lm_" + str(block_size)
+            directory, "_cached_lm_" + str(block_size)
         )
 
         if os.path.exists(cached_features_file) and not args.overwrite_cache:
