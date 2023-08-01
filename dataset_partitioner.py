@@ -179,16 +179,6 @@ def init_dataset(args):
 
     return train_dataset, test_dataset
 
-def read_lines_and_write_to_csv(input_filename, output_filename, lines):
-    with open(input_filename, 'r') as input_file, open(output_filename, 'w', newline='') as output_file:
-        csv_reader = csv.reader(input_file)
-        csv_writer = csv.writer(output_file)
-
-        for index, row in enumerate(csv_reader):
-            # print(f"index: {index}; row: {row}")
-            if index-1 in lines:
-                csv_writer.writerow(row)
-
 """
 Example 1 (Google Speech):
 python dataset_partitioner.py --data_set google_speech --data_dir /mydata/FedScale/benchmark/dataset/data/google_speech/ --task speech --model resnet34 --model_zoo none --num_participants 500
@@ -197,7 +187,7 @@ Example 2 (FEMNIST):
 python dataset_partitioner.py --data_set femnist --data_dir /mydata/FedScale/benchmark/dataset/data/femnist/ --task femnist --model resnet152 --model_zoo none --num_participants 3400
 
 Example 3 (Reddit):
-python dataset_partitioner.py --data_set reddit --data_dir /mydata/FedScale/benchmark/dataset/data/reddit/ --task nlp --model albert-base-v2 --model_zoo none --num_participants 1660820
+python dataset_partitioner.py --data_set reddit --data_dir /mydata/FedScale/benchmark/dataset/data/reddit/ --task nlp --model albert-base-v2 --model_zoo none --num_participants 130000
 """
 
 parser = argparse.ArgumentParser()
@@ -209,6 +199,8 @@ parser.add_argument('--model', type=str, help='model name')
 parser.add_argument('--model_zoo', type=str, help='model zoo')
 parser.add_argument('--num_participants', type=int, help='# of participants')
 parser.add_argument('--data_map_file', type=int, help='path to client-to-data mapping file')
+parser.add_argument('--block_size', default=64, help='block_size')
+parser.add_argument('--overwrite_cache', default=False, help='block_size')
 
 args = parser.parse_args()
 
@@ -235,59 +227,82 @@ elif args.data_set == "femnist":
     train_test_ratio = 50
 elif args.data_set == "reddit":
     num_class = 0
-    train_test_ratio = 30000
+    train_test_ratio = 53
     args.overwrite_cache = False
     args.block_size = 64
+    args.model = None
 
 print(f"Number of outputClass in {args.data_set} dataset: {num_class}")
 
 print("Data partitioner starts ...")
 
-training_sets = DataPartitioner(
-    data=train_dataset, args=args, numOfClass=num_class)
-training_sets.partition_data_helper(
-    num_clients=args.num_participants, data_map_file=args.data_map_file)
+training_sets = DataPartitioner(data=train_dataset, args=args, numOfClass=num_class)
+print("Run partition_data_helper for training_sets ...")
+training_sets.partition_data_helper(num_clients=args.num_participants, data_map_file=args.data_map_file)
 
-testing_sets = DataPartitioner(
-    data=test_dataset, args=args, numOfClass=num_class, isTest=True)
-testing_sets.partition_data_helper(num_clients=int(args.num_participants/train_test_ratio))
+testing_sets = DataPartitioner(data=test_dataset, args=args, numOfClass=num_class, isTest=True)
+testing_sets.partition_data_helper(num_clients=int(args.num_participants/train_test_ratio) + 1)
 
 print(f"Number of partitions: {len(training_sets.partitions)}.")
 
-print(f"partition[0]: {training_sets.partitions[0]}.")
-print(f"partition[0][0]: {training_sets.partitions[0][0]}.")
+# print(f"partition[0]: {training_sets.partitions[0]}.")
+# print(f"partition[0][0]: {training_sets.partitions[0][0]}.")
 
-print(f"Train dataset raw data: {train_dataset.data[training_sets.partitions[0][0]]}.")
-print(f"Train dataset raw tag: {train_dataset.targets[training_sets.partitions[0][0]]}.")
+# print(f"Train dataset raw data: {train_dataset.data[training_sets.partitions[0][0]]}.")
+# print(f"Train dataset raw tag: {train_dataset.targets[training_sets.partitions[0][0]]}.")
 
 print("Data partitioner completes ...")
 
+def read_lines_and_write_to_csv(csv_reader_dict, output_filename, lines):
+    with open(output_filename, 'w', newline='') as output_file:
+        csv_writer = csv.writer(output_file)
+
+        for line_index in lines:
+            if line_index >= 0 and line_index in csv_reader_dict:
+                csv_writer.writerow(csv_reader_dict[line_index])
+
 print("\n+++++ Writing training partitions to CSV files ... +++++")
-train_csv_path = os.path.join(args.data_dir, 'client_data_mapping', 'train.csv')
-completed = 0
 if not os.path.exists("/mydata/flame_dataset/" + args.data_set + "/train"):
     os.makedirs("/mydata/flame_dataset/" + args.data_set + "/train")
 
-for i in range(len(training_sets.partitions)):
-    output_filename = "client-" + str(i) + "-train.csv"
-    output_path = os.path.join("/mydata/flame_dataset/", args.data_set, "train", output_filename)
-    read_lines_and_write_to_csv(train_csv_path, output_path, training_sets.partitions[i])
+train_csv_path = os.path.join(args.data_dir, 'client_data_mapping', 'train.csv')
+completed = 0
+with open(train_csv_path, 'r') as input_file:
+    print("\n Reading training CSV files ...")
+    csv_reader = csv.reader(input_file)
+    csv_reader_dict = {}
+    for index, row in enumerate(csv_reader):
+        csv_reader_dict[index] = row
+    print("\n Reading training CSV files is done ...")
 
-    if i % 100 == 0:
-        completed += 100
-        print(f"{completed} partitions completed, {len(training_sets.partitions) - completed} remains...")
+    for i in range(len(training_sets.partitions)):
+        output_filename = "client-" + str(i) + "-train.csv"
+        output_path = os.path.join("/mydata/flame_dataset/", args.data_set, "train", output_filename)
+        read_lines_and_write_to_csv(csv_reader_dict, output_path, training_sets.partitions[i])
+
+        if i % 100 == 0:
+            completed += 100
+            print(f"{completed} partitions completed, {len(training_sets.partitions) - completed} remains...")
 
 print("\n+++++ Writing testing partitions to CSV files ... +++++")
-test_csv_path = os.path.join(args.data_dir, 'client_data_mapping', 'test.csv')
-completed = 0
 if not os.path.exists("/mydata/flame_dataset/" + args.data_set + "/test"):
     os.makedirs("/mydata/flame_dataset/" + args.data_set + "/test")
 
-for i in range(len(testing_sets.partitions)):
-    output_filename = "client-" + str(i) + "-test.csv"
-    output_path = os.path.join("/mydata/flame_dataset/", args.data_set, "test", output_filename)
-    read_lines_and_write_to_csv(test_csv_path, output_path, testing_sets.partitions[i])
+test_csv_path = os.path.join(args.data_dir, 'client_data_mapping', 'test.csv')
+completed = 0
+with open(test_csv_path, 'r') as input_file:
+    print("\n Reading testing CSV files ...")
+    csv_reader = csv.reader(input_file)
+    csv_reader_dict = {}
+    for index, row in enumerate(csv_reader):
+        csv_reader_dict[index] = row
+    print("\n Reading testing CSV files is done ...")
 
-    if i % 100 == 0:
-        completed += 100
-        print(f"{completed} partitions completed, {len(testing_sets.partitions) - completed} remains...")
+    for i in range(len(testing_sets.partitions)):
+        output_filename = "client-" + str(i) + "-test.csv"
+        output_path = os.path.join("/mydata/flame_dataset/", args.data_set, "test", output_filename)
+        read_lines_and_write_to_csv(csv_reader_dict, output_path, testing_sets.partitions[i])
+
+        if i % 10 == 0:
+            completed += 10
+            print(f"{completed} partitions completed, {len(testing_sets.partitions) - completed} remains...")
