@@ -107,10 +107,27 @@ class DataPartitioner(object):
         indexes = list(range(data_len))
         self.rng.shuffle(indexes)
 
-        for _ in range(num_clients):
-            part_len = int(1./num_clients * data_len)
-            self.partitions.append(indexes[0:part_len])
-            indexes = indexes[part_len:]
+        # for _ in range(num_clients):
+        #     part_len = int(1./num_clients * data_len)
+        #     self.partitions.append(indexes[0:part_len])
+        #     indexes = indexes[part_len:]
+
+        part_len = data_len // num_clients
+        start_index = 0
+
+        for i in range(num_clients):
+            remaining_clients = num_clients - len(self.partitions)
+            if remaining_clients > 0:
+                part_len = (data_len - start_index) // remaining_clients
+            else:
+                break
+
+            end_index = start_index + part_len if part_len else start_index + 1
+            self.partitions.append(indexes[start_index:end_index])
+            start_index = end_index
+
+            if i % 1000 == 0:
+                print(f"{i} clients get the partition.")
 
     def use(self, partition, istest):
         resultIndex = self.partitions[partition % len(self.partitions)]
