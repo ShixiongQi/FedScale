@@ -257,9 +257,12 @@ def read_lines_and_write_to_csv(csv_reader_dict, output_filename, lines):
     with open(output_filename, 'w', newline='') as output_file:
         csv_writer = csv.writer(output_file)
 
-        for line_index in lines:
-            if line_index >= 0 and line_index in csv_reader_dict:
-                csv_writer.writerow(csv_reader_dict[line_index])
+        if args.data_set == "reddit":
+            csv_writer.writerow(lines)
+        else:
+            for line_index in lines:
+                if line_index >= 0 and line_index in csv_reader_dict:
+                    csv_writer.writerow(csv_reader_dict[line_index])
 
 print("\n+++++ Writing training partitions to CSV files ... +++++")
 if not os.path.exists("/mydata/flame_dataset/" + args.data_set + "/train"):
